@@ -1,0 +1,18 @@
+[package]
+name = "umcan"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+description = "A no_std rust crate to generate and parse CAN Frames for UltraMotion Actuators."
+homepage = "https://github.com/ARizzo35/umcan-rs"
+repository = "https://github.com/ARizzo35/umcan-rs"
+readme = "README.md"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+embedded-can = "0.4.1"
+
+[dev-dependencies]
+anyhow = "1.0.72"
+socketcan = "2.0.0"
