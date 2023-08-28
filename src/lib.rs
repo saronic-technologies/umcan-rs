@@ -1,14 +1,26 @@
 #![no_std]
 use embedded_can::{ExtendedId, Frame, Id};
 
+use binrw::{binrw, BinRead, BinWrite};
+use binrw::io::Cursor;
+
+
+#[binrw]
+#[brw(little)]
 #[derive(Debug)]
 pub struct Telemetry {
+    #[br(map(|x: (u8, u8, u8)| x.0 as u32 | ((x.1 as u32) << 8) | ((x.2 as u32) << 16)))]
+    #[bw(map(|x: &u32| [*x as u8, (*x >> 8) as u8, (*x >> 16) as u8]))]
     pub status: u32,
     pub position: u16,
     pub current: u16,
+    #[br(map(|x: u8| ((x as i16) - 50)))]
+    #[bw(map(|x: &i16| (*x + 50) as u8))]
     pub temp: i16,
 }
 
+#[binrw]
+#[brw(little)]
 #[derive(Debug)]
 pub struct MotorCmd {
     pub cmd_value: u16,
@@ -47,12 +59,10 @@ impl Message {
         match self {
             Self::Telemetry(t) => {
                 let id = ExtendedId::new(0x7f).unwrap();
-                let mut b = [0u8; 8];
-                b[0..3].copy_from_slice(&(&t.status.to_le_bytes())[0..3]);
-                b[3..5].copy_from_slice(&t.position.to_le_bytes());
-                b[5..7].copy_from_slice(&t.current.to_le_bytes());
-                b[7..].copy_from_slice(&(&(t.temp + 50).to_le_bytes())[0..1]);
-                T::new(id, &b)
+                let mut b = Cursor::new([0u8; 8]);
+                let _ = t.write_le(&mut b);
+                let bytes = b.into_inner();
+                T::new(id, &bytes)
             }
             Self::MotorCmd(m) => {
                 let id = ExtendedId::new(0x03).unwrap();
@@ -65,7 +75,6 @@ impl Message {
 
 impl<T: Frame> From<T> for Message {
     fn from(frame: T) -> Self {
-        // Frame should be a CAN-FD frame
         let id = match frame.id() {
             Id::Standard(_) => return Self::Unsupported,
             Id::Extended(eid) => eid.as_raw(),
@@ -75,21 +84,14 @@ impl<T: Frame> From<T> for Message {
             // ctrl_id
             0x03 => {
                 let data: &[u8] = frame.data();
-                Self::MotorCmd(MotorCmd {
-                    cmd_value: u16::from_le_bytes([data[0], data[1]]),
-                })
+                let mut bytes = Cursor::new(data);
+                Self::MotorCmd(MotorCmd::read_le(&mut bytes).unwrap())
             }
             //telem_id
             0x7f => {
                 let data: &[u8] = frame.data();
-                let mut status: u32 = 0;
-                status |= data[0] as u32 | (data[1] as u32) << 8 | (data[2] as u32) << 16;
-                Self::Telemetry(Telemetry {
-                    status,
-                    position: u16::from_le_bytes(data[3..5].try_into().unwrap()),
-                    current: u16::from_le_bytes(data[5..7].try_into().unwrap()),
-                    temp: (data[7] as i16) - 50,
-                })
+                let mut bytes = Cursor::new(data);
+                Self::Telemetry(Telemetry::read_le(&mut bytes).unwrap())
             }
             _ => Self::Unsupported,
         }
