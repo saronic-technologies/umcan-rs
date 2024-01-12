@@ -55,18 +55,18 @@ impl Telemetry {
 }
 
 impl Message {
-    pub fn framify<T: Frame>(&self) -> Option<T> {
+    pub fn framify<T: Frame>(&self, can_id: u32) -> Option<T> {
         match self {
+            Self::MotorCmd(m) => {
+                let id = ExtendedId::new(can_id).unwrap();
+                T::new(id, &m.cmd_value.to_le_bytes())
+            }
             Self::Telemetry(t) => {
-                let id = ExtendedId::new(0x7f).unwrap();
+                let id = ExtendedId::new(can_id).unwrap();
                 let mut b = Cursor::new([0u8; 8]);
                 let _ = t.write_le(&mut b);
                 let bytes = b.into_inner();
                 T::new(id, &bytes)
-            }
-            Self::MotorCmd(m) => {
-                let id = ExtendedId::new(0x03).unwrap();
-                T::new(id, &m.cmd_value.to_le_bytes())
             }
             Self::Unsupported => return None,
         }
@@ -95,5 +95,21 @@ impl<T: Frame> From<T> for Message {
             }
             _ => Self::Unsupported,
         }
+    }
+}
+
+impl<T: Frame> From<T> for MotorCmd {
+    fn from(frame: T) -> Self {
+        let data: &[u8] = frame.data();
+        let mut bytes = Cursor::new(data);
+        MotorCmd::read_le(&mut bytes).unwrap()
+    }
+}
+
+impl<T: Frame> From<T> for Telemetry {
+    fn from(frame: T) -> Self {
+        let data: &[u8] = frame.data();
+        let mut bytes = Cursor::new(data);
+        Telemetry::read_le(&mut bytes).unwrap()
     }
 }
