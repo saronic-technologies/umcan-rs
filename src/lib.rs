@@ -1,9 +1,8 @@
 #![no_std]
-use embedded_can::{ExtendedId, Frame, Id};
+use embedded_can::{ExtendedId, Frame};
 
-use binrw::{binrw, BinRead, BinWrite};
 use binrw::io::Cursor;
-
+use binrw::{binrw, BinRead, BinWrite};
 
 #[binrw]
 #[brw(little)]
@@ -39,12 +38,7 @@ impl MotorCmd {
 }
 
 impl Telemetry {
-    pub fn new(
-        status: u32,
-        position: u16,
-        current: u16,
-        temp: i16,
-    ) -> Self {
+    pub fn new(status: u32, position: u16, current: u16, temp: i16) -> Self {
         Self {
             status,
             position,
@@ -69,31 +63,6 @@ impl Message {
                 T::new(id, &bytes)
             }
             Self::Unsupported => return None,
-        }
-    }
-}
-
-impl<T: Frame> From<T> for Message {
-    fn from(frame: T) -> Self {
-        let id = match frame.id() {
-            Id::Standard(_) => return Self::Unsupported,
-            Id::Extended(eid) => eid.as_raw(),
-        };
-
-        match id {
-            // ctrl_id
-            0x03 => {
-                let data: &[u8] = frame.data();
-                let mut bytes = Cursor::new(data);
-                Self::MotorCmd(MotorCmd::read_le(&mut bytes).unwrap())
-            }
-            //telem_id
-            0x7f => {
-                let data: &[u8] = frame.data();
-                let mut bytes = Cursor::new(data);
-                Self::Telemetry(Telemetry::read_le(&mut bytes).unwrap())
-            }
-            _ => Self::Unsupported,
         }
     }
 }
